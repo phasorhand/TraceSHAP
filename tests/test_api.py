@@ -82,3 +82,43 @@ class TestTraceEndpoints:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/traces/nonexistent")
             assert resp.status_code == 404
+
+
+class TestAttributionEndpoints:
+    async def test_get_attribution(self, seeded_app):
+        transport = ASGITransport(app=seeded_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/traces/t1/attribution?layers=0")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert isinstance(data, list)
+            assert len(data) >= 1
+            assert "step_id" in data[0]
+            assert "verdict" in data[0]
+
+    async def test_attribution_not_found(self, seeded_app):
+        transport = ASGITransport(app=seeded_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/traces/nonexistent/attribution")
+            assert resp.status_code == 404
+
+
+class TestPruningEndpoints:
+    async def test_agent_prune_candidates(self, seeded_app):
+        transport = ASGITransport(app=seeded_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/agents/test-agent/prune-candidates")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert isinstance(data, dict)
+            assert "candidates" in data
+            assert "trajectory_count" in data
+
+    async def test_agent_stats(self, seeded_app):
+        transport = ASGITransport(app=seeded_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/agents/test-agent/stats")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert "agent_name" in data
+            assert "trajectory_count" in data
