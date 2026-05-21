@@ -120,3 +120,49 @@ class TestCLIReport:
         assert result.exit_code == 0
         assert "t1" in result.output
         assert "step" in result.output.lower() or "attribution" in result.output.lower()
+
+
+class TestCLIPruneReport:
+    def test_prune_report(self, tmp_path):
+        db_path = str(tmp_path / "test.db")
+        asyncio.run(_seed_db(db_path))
+
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "prune-report",
+            "--db", db_path,
+            "--agent", "test-agent",
+        ])
+        assert result.exit_code == 0
+        assert "prune" in result.output.lower() or "candidate" in result.output.lower() or "report" in result.output.lower()
+
+
+class TestCLIExport:
+    def test_export_json(self, tmp_path):
+        db_path = str(tmp_path / "test.db")
+        asyncio.run(_seed_db(db_path))
+
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "export", "t1",
+            "--db", db_path,
+            "--format", "json",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["trace_id"] == "t1"
+        assert "steps" in data
+        assert "spans" in data
+
+    def test_export_csv(self, tmp_path):
+        db_path = str(tmp_path / "test.db")
+        asyncio.run(_seed_db(db_path))
+
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "export", "t1",
+            "--db", db_path,
+            "--format", "csv",
+        ])
+        assert result.exit_code == 0
+        assert "step_id" in result.output
