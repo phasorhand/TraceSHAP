@@ -458,3 +458,24 @@ def plot_dependency_cmd(db: str, agent: str, step_type: str, color_by: str, outp
             await backend.close()
 
     run_async(_run())
+
+
+@cli.command()
+@click.option("--db", default="./traceshap.db", help="Database path")
+@click.option("--host", default="0.0.0.0", help="Host to bind to")
+@click.option("--port", default=8080, type=int, help="Port to bind to")
+def serve(db: str, host: str, port: int):
+    """Start the TraceSHAP API server."""
+    import uvicorn
+    from traceshap.api.app import create_app
+    from traceshap.storage.sqlite import SQLiteBackend
+
+    async def _init():
+        backend = SQLiteBackend(db)
+        await backend.initialize()
+        return backend
+
+    backend = run_async(_init())
+    app = create_app(backend=backend)
+    click.echo(f"TraceSHAP server starting on {host}:{port}")
+    uvicorn.run(app, host=host, port=port)

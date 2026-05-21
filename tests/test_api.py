@@ -122,3 +122,31 @@ class TestPruningEndpoints:
             data = resp.json()
             assert "agent_name" in data
             assert "trajectory_count" in data
+
+
+class TestFullIntegration:
+    async def test_ingest_then_analyze_then_plot(self, seeded_app, tmp_path):
+        transport = ASGITransport(app=seeded_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            traces_resp = await client.get("/api/traces")
+            assert traces_resp.status_code == 200
+            traces = traces_resp.json()
+            assert len(traces) >= 1
+
+            trace_id = traces[0]["trace_id"]
+
+            detail_resp = await client.get(f"/api/traces/{trace_id}")
+            assert detail_resp.status_code == 200
+            detail = detail_resp.json()
+            assert len(detail["steps"]) >= 1
+
+            attr_resp = await client.get(f"/api/traces/{trace_id}/attribution?layers=0")
+            assert attr_resp.status_code == 200
+            attrs = attr_resp.json()
+            assert len(attrs) >= 1
+            assert all("verdict" in a for a in attrs)
+
+            stats_resp = await client.get("/api/agents/test-agent/stats")
+            assert stats_resp.status_code == 200
+            stats = stats_resp.json()
+            assert stats["trajectory_count"] >= 1
