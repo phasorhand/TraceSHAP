@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from traceshap.models.enums import (
     SpanKind,
     StepType,
@@ -7,6 +9,7 @@ from traceshap.models.enums import (
     RiskLevel,
     ReplayCapability,
 )
+from traceshap.models.span import TokenUsage, TraceSHAPSpan
 
 
 class TestSpanKind:
@@ -48,3 +51,56 @@ class TestDecisionStatus:
         assert DecisionStatus.REJECTED.value == "rejected"
         assert DecisionStatus.APPLIED.value == "applied"
         assert DecisionStatus.ROLLED_BACK.value == "rolled_back"
+
+
+class TestTokenUsage:
+    def test_total(self):
+        usage = TokenUsage(input_tokens=100, output_tokens=50, total_tokens=150)
+        assert usage.total_tokens == 150
+
+    def test_zero(self):
+        usage = TokenUsage(input_tokens=0, output_tokens=0, total_tokens=0)
+        assert usage.total_tokens == 0
+
+
+class TestTraceSHAPSpan:
+    def test_create_minimal(self):
+        span = TraceSHAPSpan(
+            trace_id="t1",
+            span_id="s1",
+            parent_span_id=None,
+            span_kind=SpanKind.LLM,
+            name="gpt-4o-generation",
+            input={"prompt": "hello"},
+            output={"text": "world"},
+            start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            end_time=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
+            tokens=None,
+            cost=None,
+            metadata={},
+            raw_attributes={},
+            semconv_version="otel-genai-v0.1",
+        )
+        assert span.trace_id == "t1"
+        assert span.parent_span_id is None
+        assert span.duration_ms == 1000
+
+    def test_duration_ms(self):
+        span = TraceSHAPSpan(
+            trace_id="t1",
+            span_id="s1",
+            parent_span_id="s0",
+            span_kind=SpanKind.TOOL,
+            name="search_web",
+            input={},
+            output={},
+            start_time=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 1, 1, 0, 0, 2, 500000, tzinfo=timezone.utc),
+            tokens=TokenUsage(input_tokens=10, output_tokens=20, total_tokens=30),
+            cost=0.001,
+            metadata={"framework": "langgraph"},
+            raw_attributes={"gen_ai.operation.name": "invoke_agent"},
+            semconv_version="otel-genai-v0.1",
+        )
+        assert span.duration_ms == 2500
+        assert span.tokens.total_tokens == 30
