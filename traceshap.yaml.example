@@ -1,0 +1,37 @@
+# TraceSHAP configuration
+# Copy to traceshap.yaml and fill in your values.
+
+source:
+  type: langfuse                    # langfuse | otlp | hermes_atropos | direct
+  langfuse_host: https://cloud.langfuse.com
+  langfuse_public_key: pk-...
+  langfuse_secret_key: sk-...
+  poll_interval_seconds: 10
+
+attribution:
+  layers: [0, 1, 2]                # production default; add 3, 4 for experimental
+  layer_1:
+    min_support: 50
+  layer_2:
+    embedding_model: all-MiniLM-L6-v2
+    num_samples: 200
+
+pruning:
+  prune_epsilon: 0.05
+  keep_threshold: 0.10
+  min_trajectories: 10
+
+outcome:
+  source: langfuse_score
+  score_name: task_success
+  normalization_baseline: historical_p50
+
+storage:
+  backend: sqlite
+  sqlite_path: ./traceshap.db
+  retention_days: 30
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  workers: 4
