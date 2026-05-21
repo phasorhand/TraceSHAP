@@ -166,3 +166,48 @@ class TestCLIExport:
         ])
         assert result.exit_code == 0
         assert "step_id" in result.output
+
+
+class TestCLIPlot:
+    def test_plot_force(self, tmp_path):
+        db_path = str(tmp_path / "test.db")
+        asyncio.run(_seed_db(db_path))
+        output_path = str(tmp_path / "force.html")
+
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "plot", "force", "t1",
+            "--db", db_path,
+            "--output", output_path,
+        ])
+        assert result.exit_code == 0
+        assert (tmp_path / "force.html").exists()
+
+    def test_plot_waterfall(self, tmp_path):
+        db_path = str(tmp_path / "test.db")
+        asyncio.run(_seed_db(db_path))
+        output_path = str(tmp_path / "waterfall.html")
+
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "plot", "waterfall", "t1",
+            "--db", db_path,
+            "--output", output_path,
+        ])
+        assert result.exit_code == 0
+        assert (tmp_path / "waterfall.html").exists()
+
+    def test_plot_bar(self, tmp_path):
+        db_path = str(tmp_path / "test.db")
+        asyncio.run(_seed_db(db_path))
+        output_path = str(tmp_path / "bar.html")
+
+        runner = CliRunner()
+        result = runner.invoke(cli, [
+            "plot", "bar",
+            "--db", db_path,
+            "--agent", "test-agent",
+            "--output", output_path,
+        ])
+        assert result.exit_code == 0
+        assert (tmp_path / "bar.html").exists()

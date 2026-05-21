@@ -12,6 +12,11 @@ from traceshap.cli.helpers import run_async, open_backend, build_engine, attribu
 from traceshap.pruning.advisor import PruningAdvisor
 from traceshap.config import PruningConfig
 from traceshap.storage.backend import QueryFilter
+from traceshap.plots.force import force_plot
+from traceshap.plots.waterfall import waterfall_plot
+from traceshap.plots.beeswarm import beeswarm_plot
+from traceshap.plots.bar import bar_plot
+from traceshap.plots.dependency import dependency_plot
 
 
 @click.group()
@@ -266,6 +271,189 @@ def export(trace_id: str, db: str, fmt: str):
                         s.start_time.isoformat(), s.end_time.isoformat(),
                     ])
                 click.echo(output.getvalue().strip())
+        finally:
+            await backend.close()
+
+    run_async(_run())
+
+
+@cli.group()
+def plot():
+    """Generate SHAP-style visualizations."""
+    pass
+
+
+@plot.command("force")
+@click.argument("trace_id")
+@click.option("--db", default="./traceshap.db", help="Database path")
+@click.option("--output", default="force.html", help="Output file path")
+@click.option("--layers", default="0", help="Comma-separated layer IDs")
+def plot_force(trace_id: str, db: str, output: str, layers: str):
+    """Generate a force plot for a single trajectory."""
+    layer_ids = [int(x.strip()) for x in layers.split(",")]
+
+    async def _run():
+        backend = await open_backend(db)
+        try:
+            trajectory = await backend.get_trajectory(trace_id)
+            if trajectory is None:
+                click.echo(f"Error: Trajectory '{trace_id}' not found.", err=True)
+                raise SystemExit(1)
+
+            training_trajs = None
+            if any(lid in (1, 2) for lid in layer_ids):
+                training_trajs = await backend.query_trajectories(QueryFilter(limit=200))
+
+            engine = build_engine(layer_ids, training_trajs)
+            attributions = await engine.analyze(trajectory)
+
+            base = trajectory.outcome.quality_score * 0.5 if trajectory.outcome and trajectory.outcome.quality_score else 0.5
+            fig = force_plot(attributions, base_value=base)
+            fig.write_html(output)
+            click.echo(f"Force plot saved to {output}")
+        finally:
+            await backend.close()
+
+    run_async(_run())
+
+
+@plot.command("waterfall")
+@click.argument("trace_id")
+@click.option("--db", default="./traceshap.db", help="Database path")
+@click.option("--output", default="waterfall.html", help="Output file path")
+@click.option("--layers", default="0", help="Comma-separated layer IDs")
+def plot_waterfall(trace_id: str, db: str, output: str, layers: str):
+    """Generate a waterfall plot for a single trajectory."""
+    layer_ids = [int(x.strip()) for x in layers.split(",")]
+
+    async def _run():
+        backend = await open_backend(db)
+        try:
+            trajectory = await backend.get_trajectory(trace_id)
+            if trajectory is None:
+                click.echo(f"Error: Trajectory '{trace_id}' not found.", err=True)
+                raise SystemExit(1)
+
+            training_trajs = None
+            if any(lid in (1, 2) for lid in layer_ids):
+                training_trajs = await backend.query_trajectories(QueryFilter(limit=200))
+
+            engine = build_engine(layer_ids, training_trajs)
+            attributions = await engine.analyze(trajectory)
+
+            base = trajectory.outcome.quality_score * 0.5 if trajectory.outcome and trajectory.outcome.quality_score else 0.5
+            fig = waterfall_plot(attributions, base_value=base)
+            fig.write_html(output)
+            click.echo(f"Waterfall plot saved to {output}")
+        finally:
+            await backend.close()
+
+    run_async(_run())
+
+
+@plot.command("bar")
+@click.option("--db", default="./traceshap.db", help="Database path")
+@click.option("--agent", required=True, help="Agent name")
+@click.option("--top-k", default=10, type=int, help="Number of top steps")
+@click.option("--output", default="bar.html", help="Output file path")
+@click.option("--layers", default="0", help="Comma-separated layer IDs")
+def plot_bar_cmd(db: str, agent: str, top_k: int, output: str, layers: str):
+    """Generate a bar plot of step importance across trajectories."""
+    layer_ids = [int(x.strip()) for x in layers.split(",")]
+
+    async def _run():
+        backend = await open_backend(db)
+        try:
+            trajectories = await backend.query_trajectories(
+                QueryFilter(agent_name=agent, limit=200)
+            )
+            if not trajectories:
+                click.echo(f"No trajectories found for agent '{agent}'.")
+                return
+
+            engine = build_engine(layer_ids, trajectories if any(lid in (1, 2) for lid in layer_ids) else None)
+
+            multi_attrs = []
+            for traj in trajectories:
+                attrs = await engine.analyze(traj)
+                multi_attrs.append(attrs)
+
+            fig = bar_plot(multi_attrs, top_k=top_k)
+            fig.write_html(output)
+            click.echo(f"Bar plot saved to {output}")
+        finally:
+            await backend.close()
+
+    run_async(_run())
+
+
+@plot.command("beeswarm")
+@click.option("--db", default="./traceshap.db", help="Database path")
+@click.option("--agent", required=True, help="Agent name")
+@click.option("--color-by", default="cost_delta", help="Color variable")
+@click.option("--output", default="beeswarm.html", help="Output file path")
+@click.option("--layers", default="0", help="Comma-separated layer IDs")
+def plot_beeswarm_cmd(db: str, agent: str, color_by: str, output: str, layers: str):
+    """Generate a beeswarm plot across trajectories."""
+    layer_ids = [int(x.strip()) for x in layers.split(",")]
+
+    async def _run():
+        backend = await open_backend(db)
+        try:
+            trajectories = await backend.query_trajectories(
+                QueryFilter(agent_name=agent, limit=200)
+            )
+            if not trajectories:
+                click.echo(f"No trajectories found for agent '{agent}'.")
+                return
+
+            engine = build_engine(layer_ids, trajectories if any(lid in (1, 2) for lid in layer_ids) else None)
+
+            multi_attrs = []
+            for traj in trajectories:
+                attrs = await engine.analyze(traj)
+                multi_attrs.append(attrs)
+
+            fig = beeswarm_plot(multi_attrs, color_by=color_by)
+            fig.write_html(output)
+            click.echo(f"Beeswarm plot saved to {output}")
+        finally:
+            await backend.close()
+
+    run_async(_run())
+
+
+@plot.command("dependency")
+@click.option("--db", default="./traceshap.db", help="Database path")
+@click.option("--agent", required=True, help="Agent name")
+@click.option("--step-type", required=True, help="Step to analyze")
+@click.option("--color-by", required=True, help="Step for color encoding")
+@click.option("--output", default="dependency.html", help="Output file path")
+@click.option("--layers", default="0", help="Comma-separated layer IDs")
+def plot_dependency_cmd(db: str, agent: str, step_type: str, color_by: str, output: str, layers: str):
+    """Generate a dependency plot for step interactions."""
+    layer_ids = [int(x.strip()) for x in layers.split(",")]
+
+    async def _run():
+        backend = await open_backend(db)
+        try:
+            trajectories = await backend.query_trajectories(
+                QueryFilter(agent_name=agent, limit=200)
+            )
+            if not trajectories:
+                click.echo(f"No trajectories found for agent '{agent}'.")
+                return
+
+            engine = build_engine(layer_ids, trajectories if any(lid in (1, 2) for lid in layer_ids) else None)
+
+            multi_attrs = []
+            for traj in trajectories:
+                attrs = await engine.analyze(traj)
+                multi_attrs.append(attrs)
+
+            fig = dependency_plot(multi_attrs, step_name=step_type, color_by=color_by)
+            fig.write_html(output)
+            click.echo(f"Dependency plot saved to {output}")
         finally:
             await backend.close()
 
