@@ -7,6 +7,10 @@ from traceshap.models import (
 from traceshap.ingestion.sources.base import SpanSource
 from traceshap.pipeline import TraceSHAPPipeline
 from traceshap.storage.sqlite import SQLiteBackend
+from traceshap.attribution.engine import AttributionEngine
+from traceshap.attribution.layer0_rules import Layer0Rules
+from traceshap.pruning.advisor import PruningAdvisor
+from traceshap.config import PruningConfig
 
 
 class FakeSource(SpanSource):
@@ -94,5 +98,31 @@ class TestPipeline:
         pipeline = TraceSHAPPipeline(source=source, storage=backend)
         count = await pipeline.ingest_once()
         assert count == 0
+
+        await backend.close()
+
+
+class TestPipelineWithAttribution:
+    async def test_full_pipeline_analyze(self, tmp_path):
+        spans = _make_spans("t1")
+        source = FakeSource([spans])
+        backend = SQLiteBackend(str(tmp_path / "test.db"))
+        await backend.initialize()
+
+        pipeline = TraceSHAPPipeline(source=source, storage=backend)
+        await pipeline.ingest_once()
+
+        trajectory = await backend.get_trajectory("t1")
+        assert trajectory is not None
+
+        engine = AttributionEngine(layers=[Layer0Rules()])
+        attributions = await engine.analyze(trajectory)
+        assert len(attributions) == 3
+
+        config = PruningConfig(prune_epsilon=0.05, keep_threshold=0.10)
+        advisor = PruningAdvisor(config)
+        report = advisor.analyze(trajectory, attributions)
+        assert report.total_steps == 3
+        assert report.risk_assessment is not None
 
         await backend.close()
