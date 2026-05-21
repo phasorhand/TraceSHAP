@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime, timezone
 
 from traceshap.models.enums import (
@@ -11,6 +12,9 @@ from traceshap.models.enums import (
 )
 from traceshap.models.span import TokenUsage, TraceSHAPSpan
 from traceshap.models.step import CanonicalStep
+from traceshap.models.trajectory import SpanNode, TrajectoryMeta, Trajectory
+from traceshap.models.outcome import Outcome, ConfidenceInterval, StepAttribution
+from traceshap.models.pruning import Savings, ValidationPlan, PruneCandidate, PruningReport
 
 
 class TestSpanKind:
@@ -170,3 +174,123 @@ class TestCanonicalStep:
             end_time=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
         )
         assert not step.is_protected
+
+
+class TestOutcome:
+    def test_create_full(self):
+        outcome = Outcome(
+            success=True,
+            quality_score=0.85,
+            token_cost=1500,
+            latency_ms=3000,
+            custom_metrics={"relevance": 0.9},
+            evaluator_id="gpt-4o-judge",
+            evaluator_version="v1",
+            score_confidence=0.92,
+            label_delay_ms=500,
+        )
+        assert outcome.success is True
+        assert outcome.quality_score == 0.85
+
+    def test_create_minimal(self):
+        outcome = Outcome(
+            success=False,
+            quality_score=None,
+            token_cost=500,
+            latency_ms=1000,
+            custom_metrics={},
+        )
+        assert outcome.evaluator_id is None
+
+
+class TestConfidenceInterval:
+    def test_contains(self):
+        ci = ConfidenceInterval(lower=0.1, point=0.3, upper=0.5)
+        assert ci.contains(0.3)
+        assert ci.contains(0.1)
+        assert not ci.contains(0.05)
+
+    def test_width(self):
+        ci = ConfidenceInterval(lower=-0.1, point=0.0, upper=0.1)
+        assert ci.width == pytest.approx(0.2)
+
+
+class TestStepAttribution:
+    def test_create(self):
+        attr = StepAttribution(
+            step_id="step-001",
+            step_name="search_web",
+            node_id="search_node",
+            quality_delta=-0.15,
+            cost_delta=0.002,
+            latency_delta=500,
+            risk_delta=0.0,
+            layer_scores={0: -0.1, 1: -0.2, 2: -0.15},
+            confidence=ConfidenceInterval(lower=-0.2, point=-0.15, upper=-0.1),
+            verdict=Verdict.KEEP,
+            causal_hypothesis=None,
+            evidence=["Layer 0: no rule violation", "Layer 2: removal hurts quality by 0.15"],
+            calibration=None,
+        )
+        assert attr.verdict == Verdict.KEEP
+
+
+class TestSpanNode:
+    def test_tree_structure(self):
+        root = SpanNode(span_id="s0", children=[
+            SpanNode(span_id="s1", children=[]),
+            SpanNode(span_id="s2", children=[
+                SpanNode(span_id="s3", children=[]),
+            ]),
+        ])
+        assert len(root.children) == 2
+        assert root.children[1].children[0].span_id == "s3"
+
+
+class TestTrajectory:
+    def test_create_without_outcome(self):
+        t = Trajectory(
+            trace_id="t1",
+            spans=[],
+            steps=[],
+            span_tree=SpanNode(span_id="root", children=[]),
+            outcome=None,
+            metadata=TrajectoryMeta(framework="langgraph", agent_name="my-agent"),
+        )
+        assert t.outcome is None
+        assert t.metadata.framework == "langgraph"
+
+
+class TestSavings:
+    def test_create(self):
+        s = Savings(
+            token_reduction=500,
+            cost_reduction=0.005,
+            latency_reduction_ms=800,
+            quality_impact_range=(-0.02, 0.01),
+        )
+        assert s.token_reduction == 500
+
+
+class TestPruneCandidate:
+    def test_create(self):
+        candidate = PruneCandidate(
+            target_type="node",
+            target_id="retry_search",
+            evidence=[],
+            estimated_savings=Savings(
+                token_reduction=200,
+                cost_reduction=0.001,
+                latency_reduction_ms=300,
+                quality_impact_range=(-0.01, 0.005),
+            ),
+            required_validation=ValidationPlan(
+                replay_required=True,
+                replay_mode=ReplayCapability.RECORDED_IO_REPLAY,
+                min_replay_count=5,
+                ab_test_recommended=False,
+                human_review_required=False,
+            ),
+            decision_status=DecisionStatus.CANDIDATE,
+        )
+        assert candidate.decision_status == DecisionStatus.CANDIDATE
