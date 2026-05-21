@@ -72,3 +72,71 @@ class TestWaterfallPlot:
         path = tmp_path / "waterfall.html"
         fig.write_html(str(path))
         assert path.exists()
+
+
+from traceshap.plots.beeswarm import beeswarm_plot
+from traceshap.plots.bar import bar_plot
+from traceshap.plots.dependency import dependency_plot
+
+
+def _multi_trajectory_attrs():
+    """Simulate attributions from multiple trajectories for cross-trajectory plots."""
+    import random
+    random.seed(42)
+    step_names = ["plan", "search_web", "summarize", "validate", "format"]
+    all_attrs = []
+    for traj_idx in range(20):
+        traj_attrs = []
+        for name in step_names:
+            delta = random.gauss(0.05 if name in ("plan", "validate") else -0.02, 0.05)
+            traj_attrs.append(_attr(
+                f"t{traj_idx}-{name}", name, delta,
+                ci_lower=delta - 0.03, ci_upper=delta + 0.03,
+            ))
+        all_attrs.append(traj_attrs)
+    return all_attrs
+
+
+class TestBeeswarmPlot:
+    def test_returns_figure(self):
+        multi_attrs = _multi_trajectory_attrs()
+        fig = beeswarm_plot(multi_attrs)
+        assert fig is not None
+        assert hasattr(fig, "to_html")
+
+    def test_save_html(self, tmp_path):
+        multi_attrs = _multi_trajectory_attrs()
+        fig = beeswarm_plot(multi_attrs)
+        path = tmp_path / "beeswarm.html"
+        fig.write_html(str(path))
+        assert path.exists()
+
+
+class TestBarPlot:
+    def test_returns_figure(self):
+        multi_attrs = _multi_trajectory_attrs()
+        fig = bar_plot(multi_attrs, top_k=5)
+        assert fig is not None
+        assert hasattr(fig, "to_html")
+
+    def test_save_html(self, tmp_path):
+        multi_attrs = _multi_trajectory_attrs()
+        fig = bar_plot(multi_attrs, top_k=3)
+        path = tmp_path / "bar.html"
+        fig.write_html(str(path))
+        assert path.exists()
+
+
+class TestDependencyPlot:
+    def test_returns_figure(self):
+        multi_attrs = _multi_trajectory_attrs()
+        fig = dependency_plot(multi_attrs, step_name="plan", color_by="search_web")
+        assert fig is not None
+        assert hasattr(fig, "to_html")
+
+    def test_save_html(self, tmp_path):
+        multi_attrs = _multi_trajectory_attrs()
+        fig = dependency_plot(multi_attrs, step_name="plan", color_by="validate")
+        path = tmp_path / "dep.html"
+        fig.write_html(str(path))
+        assert path.exists()
