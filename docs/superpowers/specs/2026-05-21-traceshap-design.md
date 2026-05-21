@@ -694,6 +694,13 @@ traceshap report <trace_id>
 traceshap prune-report --agent myagent --min-trajectories 50
 traceshap export <trace_id> --format json|csv|otel
 
+# SHAP visualizations
+traceshap plot force <trace_id> --output force.html
+traceshap plot beeswarm --agent myagent --color-by token_cost --output beeswarm.html
+traceshap plot waterfall <trace_id> --output waterfall.png
+traceshap plot bar --agent myagent --top-k 10 --output importance.png
+traceshap plot dependency --step-type search_web --color-by retry_search --output dep.html
+
 # Analysis jobs (async)
 traceshap analyze <trace_id> --async    # returns job_id
 traceshap job <job_id>                  # check status
@@ -718,14 +725,137 @@ WS   /ws/live                                 # real-time attribution push
 
 ### Web Dashboard
 
-FastAPI + React (lightweight SPA). Four core pages:
+FastAPI + React (lightweight SPA). Five core pages:
 
 | Page | Content |
 |------|---------|
 | **Overview** | Agent list, trajectory counts, per-dimension score trends, PRUNE_CANDIDATE rate |
 | **Trajectory Detail** | Step tree visualization (colored by verdict: green=KEEP, yellow=REVIEW, red=PRUNE_CANDIDATE, gray=INSUFFICIENT_EVIDENCE), click to expand per-dimension deltas + confidence intervals |
+| **SHAP Plots** | Classic SHAP-style visualizations adapted for agent trajectories (see below) |
 | **Ablation View** | Select a step, see per-dimension removal impact with CIs, causal hypothesis graph (Layer 4) |
 | **Prune Dashboard** | Cross-trajectory candidates with decision lifecycle, savings trend, validation plan status |
+
+### SHAP-Style Visualizations
+
+TraceSHAP outputs the same signature plots as the classic `shap` Python library, adapted from ML features to agent trajectory steps.
+
+#### 1. Force Plot (Single Trajectory)
+
+Classic SHAP force plot adapted for one trajectory. Shows how each step pushes the outcome from the **base value** (agent's historical average score) to the **final value** (this trajectory's score).
+
+```
+              higher ⇄ lower
+         f(x)
+base: 0.72  ──────────────────────────────── final: 0.85
+         
+  ◀═══════╗  ╔══════════════════════════════▶
+  search_web  │  gpt-4o-plan    code_edit     validate_output
+  Δ=-0.08     │  Δ=+0.12       Δ=+0.06      Δ=+0.03
+  (REVIEW)    │  (KEEP)        (KEEP)        (KEEP)
+              ╚══════╗
+              retry_search
+              Δ=-0.02 (PRUNE_CANDIDATE)
+```
+
+- **Red arrows** (pointing left): steps that push score **higher** than base (positive contribution)
+- **Blue arrows** (pointing right): steps that push score **lower** than base (negative contribution)
+- Arrow width proportional to |Shapley value|
+- Label shows step name, delta value, and verdict
+- Interactive: hover for per-dimension breakdown (quality_delta, cost_delta, latency_delta)
+
+#### 2. Beeswarm Plot (Cross-Trajectory Summary)
+
+Classic SHAP beeswarm/summary plot. For each **step type** (y-axis), shows the distribution of Shapley values across many trajectories (x-axis), colored by a step attribute.
+
+```
+                         SHAP value (impact on outcome)
+                    -0.3  -0.2  -0.1   0   +0.1  +0.2  +0.3
+                     │     │     │     │     │     │     │
+  gpt-4o-plan        │     │     │  ●●●●●●●●●●●●●●●●    │      High
+  search_web         │     │  ●●●●●●●●●●●●  │           │       ↑
+  code_edit          │     │     │ ●●●●●●●●●●│           │    cost/token
+  validate_output    │     │     │●●●●●●     │           │       ↓
+  retry_search       │  ●●●●●●●●│●           │           │      Low
+  format_response    │     │    ●●●●●        │           │
+```
+
+- Each dot = one trajectory's Shapley value for that step type
+- **Color gradient** (blue → red): step attribute value (configurable: token cost, latency, attempt_index)
+- Steps sorted by mean |SHAP value| (most impactful at top)
+- Shows distribution shape: tight cluster = consistent impact; wide spread = context-dependent
+
+#### 3. Waterfall Plot (Single Trajectory, Detailed)
+
+Vertical bar chart showing cumulative attribution for one trajectory:
+
+```
+  base value = 0.72
+  ─────────────────
+  + gpt-4o-plan      ████████████  +0.12  → 0.84
+  + code_edit         ██████       +0.06  → 0.90
+  + validate_output   ███          +0.03  → 0.93
+  - retry_search      ██           -0.02  → 0.91
+  - search_web        ████████     -0.08  → 0.83
+  + (other)           ██           +0.02  → 0.85
+  ─────────────────
+  f(x) = 0.85
+```
+
+#### 4. Bar Plot (Global Step Importance)
+
+Mean |SHAP value| per step type across all trajectories:
+
+```
+  gpt-4o-plan      ████████████████████  0.15
+  search_web       ██████████████       0.11
+  code_edit        ████████             0.08
+  retry_search     ██████               0.06
+  validate_output  ████                 0.04
+  format_response  ███                  0.03
+```
+
+Color: red = net positive average, blue = net negative average.
+
+#### 5. Dependency Plot (Step Interaction)
+
+Scatter plot showing how one step's SHAP value depends on another step's presence/attribute:
+
+- X-axis: step A's attribute (e.g., search_web query length)
+- Y-axis: step A's SHAP value
+- Color: step B's attribute (e.g., was retry_search present?)
+- Reveals interaction effects (e.g., "search_web is only valuable when not followed by retry")
+
+#### Python API for Plots
+
+```python
+import traceshap
+
+# Force plot for single trajectory
+traceshap.plots.force(trajectory_id="t1")
+
+# Beeswarm across trajectories
+traceshap.plots.beeswarm(agent_name="my-agent", color_by="token_cost")
+
+# Waterfall for single trajectory
+traceshap.plots.waterfall(trajectory_id="t1")
+
+# Bar plot (global importance)
+traceshap.plots.bar(agent_name="my-agent", top_k=10)
+
+# Dependency plot
+traceshap.plots.dependency(step_type="search_web", color_by="retry_search.present")
+
+# Export as HTML (interactive) or PNG (static)
+fig = traceshap.plots.force(trajectory_id="t1")
+fig.save_html("force_plot.html")
+fig.save_png("force_plot.png")
+```
+
+#### Implementation: matplotlib (static) + Plotly (interactive in Dashboard)
+
+- **Python library (`traceshap.plots`)**: matplotlib for static PNG, Plotly for interactive HTML
+- **Web Dashboard**: Plotly.js/React-Plotly for interactive charts
+- **CLI**: `traceshap plot force <trace_id> --output force.png`
 
 ---
 
@@ -836,9 +966,10 @@ traceshap serve         # SQLite + local dashboard at http://localhost:8080
 | Langfuse | langfuse Python SDK |
 | Attribution compute | numpy, scipy (Shapley + statistics), scikit-learn (sequence models) |
 | Embedding | sentence-transformers (all-MiniLM-L6-v2, local, cached) |
+| Visualization | matplotlib (static PNG) + Plotly (interactive HTML/Dashboard) |
 | Storage | SQLAlchemy (SQLite/PG unified ORM) |
 | CLI | click |
-| Web frontend | React + Vite + Recharts (charts) + react-d3-tree (step tree) |
+| Web frontend | React + Vite + React-Plotly.js (SHAP plots) + react-d3-tree (step tree) |
 | Packaging | pyproject.toml, hatchling |
 | Containers | Dockerfile, docker-compose.yaml |
 
