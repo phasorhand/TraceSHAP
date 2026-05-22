@@ -1,6 +1,7 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import Overview from './pages/Overview'
 import TraceDetail from './pages/TraceDetail'
+import Plots from './pages/Plots'
 
 export default function App() {
   return (
@@ -10,10 +11,12 @@ export default function App() {
         <Link to="/" className="text-blue-600 hover:underline">Overview</Link>
         <Link to="/traces" className="text-blue-600 hover:underline">Traces</Link>
         <Link to="/pruning" className="text-blue-600 hover:underline">Pruning</Link>
+        <Link to="/plots" className="text-blue-600 hover:underline">Plots</Link>
       </nav>
       <Routes>
         <Route path="/" element={<Overview />} />
         <Route path="/traces/:traceId" element={<TraceDetail />} />
+        <Route path="/plots" element={<Plots />} />
       </Routes>
     </div>
   )
