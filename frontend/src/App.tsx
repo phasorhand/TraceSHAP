@@ -1,8 +1,5 @@
 import { Routes, Route, Link } from 'react-router-dom'
-
-function Overview() {
-  return <div className="p-6"><h1 className="text-2xl font-bold">Overview</h1><p className="mt-2 text-gray-600">Loading...</p></div>
-}
+import Overview from './pages/Overview'
 
 export default function App() {
   return (
