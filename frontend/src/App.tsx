@@ -1,5 +1,6 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import Overview from './pages/Overview'
+import TraceDetail from './pages/TraceDetail'
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
       </nav>
       <Routes>
         <Route path="/" element={<Overview />} />
+        <Route path="/traces/:traceId" element={<TraceDetail />} />
       </Routes>
     </div>
   )
