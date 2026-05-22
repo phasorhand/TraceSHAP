@@ -1,5 +1,6 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import Overview from './pages/Overview'
+import Traces from './pages/Traces'
 import TraceDetail from './pages/TraceDetail'
 import Plots from './pages/Plots'
 import Pruning from './pages/Pruning'
@@ -11,11 +12,12 @@ export default function App() {
         <span className="font-bold text-lg">TraceSHAP</span>
         <Link to="/" className="text-blue-600 hover:underline">Overview</Link>
         <Link to="/traces" className="text-blue-600 hover:underline">Traces</Link>
-        <Link to="/pruning" className="text-blue-600 hover:underline">Pruning</Link>
         <Link to="/plots" className="text-blue-600 hover:underline">Plots</Link>
+        <Link to="/pruning" className="text-blue-600 hover:underline">Pruning</Link>
       </nav>
       <Routes>
         <Route path="/" element={<Overview />} />
+        <Route path="/traces" element={<Traces />} />
         <Route path="/traces/:traceId" element={<TraceDetail />} />
         <Route path="/plots" element={<Plots />} />
         <Route path="/pruning" element={<Pruning />} />
