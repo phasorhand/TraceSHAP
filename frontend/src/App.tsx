@@ -2,6 +2,7 @@ import { Routes, Route, Link } from 'react-router-dom'
 import Overview from './pages/Overview'
 import TraceDetail from './pages/TraceDetail'
 import Plots from './pages/Plots'
+import Pruning from './pages/Pruning'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/" element={<Overview />} />
         <Route path="/traces/:traceId" element={<TraceDetail />} />
         <Route path="/plots" element={<Plots />} />
+        <Route path="/pruning" element={<Pruning />} />
       </Routes>
     </div>
   )
