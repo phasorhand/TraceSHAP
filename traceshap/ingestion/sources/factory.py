@@ -19,4 +19,18 @@ def create_source(config: SourceConfig) -> SpanSource:
             source_hint=config.source_hint or "otlp",
         )
 
-    raise ValueError(f"Unknown source type: '{config.type}'. Supported: langfuse, otlp_json")
+    if config.type == "otlp_live":
+        from traceshap.ingestion.sources.otlp_live import OTLPLiveSource
+        return OTLPLiveSource(
+            host=config.otlp_live_host or "0.0.0.0",
+            port=config.otlp_live_port or 4318,
+            source_hint=config.source_hint or "otlp",
+            auth_token=config.otlp_live_auth_token or None,
+            max_buffer_size=config.otlp_live_max_buffer or 10000,
+        )
+
+    if config.type == "hermes_jsonl":
+        from traceshap.ingestion.sources.hermes_jsonl import HermesJsonlSource
+        return HermesJsonlSource(path=config.otlp_endpoint)
+
+    raise ValueError(f"Unknown source type: '{config.type}'. Supported: langfuse, otlp_json, otlp_live, hermes_jsonl")

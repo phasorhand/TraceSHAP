@@ -13,6 +13,10 @@ class SourceConfig:
     poll_interval_seconds: int = 10
     otlp_endpoint: str = ""
     source_hint: str = ""
+    otlp_live_host: str = ""
+    otlp_live_port: int = 4318
+    otlp_live_auth_token: str = ""
+    otlp_live_max_buffer: int = 10000
 
 
 @dataclass
